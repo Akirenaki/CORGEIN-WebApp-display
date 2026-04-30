@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Air Quality Monitor</title>
+    <!-- Google Fonts: Space Grotesk (headings, labels) + JetBrains Mono (numeric values) -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"
+    />
+    <style>
+      /* ==========================================================================
+         CSS DESIGN TOKENS
+         Custom properties for the dark industrial color palette, typography
+         scale, spacing, and border radii. All other sections reference these
+         tokens — change a value here and it propagates everywhere.
+         ========================================================================== */
+
+      :root {
+        --bg:             #0f1117;  /* page background — deep charcoal */
+        --card-bg:        #1a1d27;  /* card surface — slightly lighter charcoal */
+        --card-border:    #2a2d3a;  /* card border — subtle separator */
+        --text-primary:   #e8eaf0;  /* near-white — contrast ≥ 12:1 on card surface */
+        --text-secondary: #8b90a0;  /* muted labels/units — contrast ≥ 4.6:1 on card surface */
+        --accent:         #00d4ff;  /* cyan — START button and active indicators */
+        --good:           #22c55e;  /* status Good — green */
+        --moderate:       #f59e0b;  /* status Moderate — amber */
+        --unhealthy:      #f04848;  /* status Unhealthy — red (contrast ≥ 4.5:1 on card surface) */
+      }
+
+      /* ==========================================================================
+         CSS LAYOUT
+         Page-level layout rules: body, grid containers, responsive breakpoints
+         (single column → two columns → three columns), and the overall
+         landing / dashboard stacking context.
+         ========================================================================== */
+
+      *, *::before, *::after { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 16px;
+        background: var(--bg);
+        color: var(--text-primary);
+        /* Prevent horizontal overflow at all viewport widths */
+        max-width: 100%;
+        overflow-x: hidden;
+      }
+
+      /* Dashboard layout */
+      #dashboard {
+        min-height: 100vh;
+        padding: 1.5rem;
+      }
+
+      /* Responsive card grid — mobile-first */
+      .card-grid {
+        display: grid;
+        grid-template-columns: 1fr;          /* single column on mobile */
+        gap: 1rem;
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+
+      @media (min-width: 640px) {
+        .card-grid {
+          grid-template-columns: repeat(2, 1fr);  /* two columns on tablet */
+        }
+      }
+
+      @media (min-width: 1024px) {
+        .card-grid {
+          grid-template-columns: repeat(3, 1fr);  /* three columns on desktop */
+        }
+      }
+
+      /* ==========================================================================
+         CSS COMPONENTS
+         Per-component styles: #landing, #dashboard, .metric-card, .card-value,
+         .card-status, .card-indicator, #start-btn, #timestamp, and all
+         associated modifier classes (e.g., card--pulse).
+         ========================================================================== */
+
+      /* Landing Screen */
+      #landing {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+        text-align: center;
+        padding: 2rem;
+        z-index: 10;
+      }
+
+      .landing-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: clamp(2rem, 5vw, 3.5rem);
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0 0 1rem;
+        letter-spacing: -0.02em;
+      }
+
+      .landing-subtitle {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: clamp(1rem, 2vw, 1.25rem);
+        color: var(--text-secondary);
+        margin: 0 0 3rem;
+        max-width: 480px;
+        line-height: 1.6;
+      }
+
+      /* START Button */
+      #start-btn {
+        min-width: 120px;
+        min-height: 48px;
+        padding: 0.75rem 2.5rem;
+        background: var(--accent);
+        color: #0f1117;
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.125rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: opacity 200ms ease, transform 150ms ease;
+      }
+
+      #start-btn:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+      }
+
+      #start-btn:active {
+        transform: translateY(0);
+      }
+
+      #start-btn:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 3px;
+      }
+
+      /* Dashboard header */
+      #dashboard header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--card-border);
+      }
+
+      .dashboard-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin: 0;
+        letter-spacing: -0.01em;
+      }
+
+      #timestamp {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+      }
+
+      /* Metric Card */
+      .metric-card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 8px;
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        transition: box-shadow 200ms ease;
+      }
+
+      .card-name {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 0.875rem;   /* 14px — label; body text is 16px */
+        font-weight: 500;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .card-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 2.25rem;    /* 36px — well above the 32px minimum */
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1;
+      }
+
+      .card-unit {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1rem;       /* 16px — meets the ≥ 16px minimum */
+        color: var(--text-secondary);
+      }
+
+      .card-status {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1rem;       /* 16px — meets the ≥ 16px minimum */
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      /* Color indicator — a small colored dot/badge */
+      .card-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        /* default color; overridden inline by the renderer via background-color */
+        background-color: var(--text-secondary);
+        margin-top: auto;
+        align-self: flex-start;
+      }
+
+      /* ==========================================================================
+         CSS ANIMATIONS
+         @keyframes definitions and animation utility classes:
+           - pulse       : brief brightness/scale burst on card update (600 ms)
+           - fadeOut     : landing screen fade-out on START click (600 ms)
+         Also includes the prefers-reduced-motion override block.
+         ========================================================================== */
+
+      /* Pulse animation — triggered on each card update (600 ms) */
+      @keyframes pulse {
+        0%   { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); }
+        40%  { box-shadow: 0 0 0 4px rgba(0, 212, 255, 0.25), 0 2px 8px rgba(0, 0, 0, 0.4); }
+        100% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4); }
+      }
+
+      .card--pulse {
+        animation: pulse 600ms ease-out;
+      }
+
+      /* Landing screen fade-out — triggered when START is clicked */
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to   { opacity: 0; }
+      }
+
+      #landing.is-transitioning {
+        animation: fadeOut 600ms forwards;
+      }
+
+      /* Respect user's motion preferences — disable all animations */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Landing screen — visible on initial load; hidden after START is clicked -->
+    <div id="landing">
+      <h1 class="landing-title">Air Quality Monitor</h1>
+      <p class="landing-subtitle">Real-time indoor air quality monitoring — CO₂, CO, PM2.5, PM10, HCHO &amp; TVOC</p>
+      <button id="start-btn" type="button">START</button>
+    </div>
+
+    <!-- Monitoring view — hidden on initial load; revealed after START is clicked -->
+    <div id="dashboard" style="display:none">
+      <header>
+        <h1 class="dashboard-title">Air Quality Monitor</h1>
+        <span id="timestamp" aria-live="polite"></span>
+      </header>
+      <main>
+        <div class="card-grid">
+
+          <article class="metric-card" data-metric="co2" aria-label="Carbon Dioxide metric card">
+            <span class="card-name">Carbon Dioxide</span>
+            <span class="card-value">--</span>
+            <span class="card-unit">ppm</span>
+            <span class="card-status">--</span>
+            <span class="card-indicator"></span>
+          </article>
+
+          <article class="metric-card" data-metric="co" aria-label="Carbon Monoxide metric card">
+            <span class="card-name">Carbon Monoxide</span>
+            <span class="card-value">--</span>
+            <span class="card-unit">ppm</span>
+            <span class="card-status">--</span>
+            <span class="card-indicator"></span>
+          </article>
+
+          <article class="metric-card" data-metric="pm25" aria-label="Fine Particulate Matter metric card">
+            <span class="card-name">Fine Particulate Matter</span>
+            <span class="card-value">--</span>
+            <span class="card-unit">µg/m³</span>
+            <span class="card-status">--</span>
+            <span class="card-indicator"></span>
+          </article>
+
+          <article class="metric-card" data-metric="pm10" aria-label="Coarse Particulate Matter metric card">
+            <span class="card-name">Coarse Particulate Matter</span>
+            <span class="card-value">--</span>
+            <span class="card-unit">µg/m³</span>
+            <span class="card-status">--</span>
+            <span class="card-indicator"></span>
+          </article>
+
+          <article class="metric-card" data-metric="hcho" aria-label="Formaldehyde metric card">
+            <span class="card-name">Formaldehyde</span>
+            <span class="card-value">--</span>
+            <span class="card-unit">mg/m³</span>
+            <span class="card-status">--</span>
+            <span class="card-indicator"></span>
+          </article>
+
+          <article class="metric-card" data-metric="tvoc" aria-label="Total VOCs metric card">
+            <span class="card-name">Total VOCs</span>
+            <span class="card-value">--</span>
+            <span class="card-unit">ppb</span>
+            <span class="card-status">--</span>
+            <span class="card-indicator"></span>
+          </article>
+
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // ============================================================
+      // CONFIG
+      // Static configuration object containing all metric definitions
+      // (name, unit, precision, bounds, baseline ranges, deltas, and
+      // classification thresholds) plus the simulation update interval.
+      // Centralising config here makes thresholds easy to audit and
+      // modify without touching any logic code.
+      // ============================================================
+
+      const CONFIG = {
+        UPDATE_INTERVAL: 5000, // ms — how often the simulator ticks and cards refresh
+
+        metrics: {
+          co2: {
+            name: 'Carbon Dioxide',   // full display name shown on the metric card
+            unit: 'ppm',              // unit of measurement displayed alongside the value
+            precision: 0,             // decimal places for display (whole number)
+            min: 400, max: 5000,      // absolute clamp bounds — values never leave this range
+            baseline: { min: 400, max: 800 }, // initial value is seeded uniformly within this range
+            delta: 50,                // max random change applied per tick (±delta random walk)
+            thresholds: { good: 1000, moderate: 2000 }, // upper bounds for Good and Moderate tiers
+          },
+          co: {
+            name: 'Carbon Monoxide',  // full display name shown on the metric card
+            unit: 'ppm',              // unit of measurement displayed alongside the value
+            precision: 0,             // decimal places for display (whole number)
+            min: 0, max: 100,         // absolute clamp bounds — values never leave this range
+            baseline: { min: 0, max: 5 }, // initial value is seeded uniformly within this range
+            delta: 2,                 // max random change applied per tick (±delta random walk)
+            thresholds: { good: 9, moderate: 35 }, // upper bounds for Good and Moderate tiers
+          },
+          pm25: {
+            name: 'Fine Particulate Matter', // full display name shown on the metric card
+            unit: 'µg/m³',            // unit of measurement displayed alongside the value
+            precision: 1,             // decimal places for display (one decimal place)
+            min: 0, max: 150,         // absolute clamp bounds — values never leave this range
+            baseline: { min: 0, max: 10 }, // initial value is seeded uniformly within this range
+            delta: 3,                 // max random change applied per tick (±delta random walk)
+            thresholds: { good: 12.0, moderate: 35.4 }, // upper bounds for Good and Moderate tiers
+          },
+          pm10: {
+            name: 'Coarse Particulate Matter', // full display name shown on the metric card
+            unit: 'µg/m³',            // unit of measurement displayed alongside the value
+            precision: 1,             // decimal places for display (one decimal place)
+            min: 0, max: 300,         // absolute clamp bounds — values never leave this range
+            baseline: { min: 0, max: 40 }, // initial value is seeded uniformly within this range
+            delta: 5,                 // max random change applied per tick (±delta random walk)
+            thresholds: { good: 54, moderate: 154 }, // upper bounds for Good and Moderate tiers
+          },
+          hcho: {
+            name: 'Formaldehyde',     // full display name shown on the metric card
+            unit: 'mg/m³',            // unit of measurement displayed alongside the value
+            precision: 2,             // decimal places for display (two decimal places)
+            min: 0, max: 0.5,         // absolute clamp bounds — values never leave this range
+            baseline: { min: 0, max: 0.05 }, // initial value is seeded uniformly within this range
+            delta: 0.01,              // max random change applied per tick (±delta random walk)
+            thresholds: { good: 0.08, moderate: 0.16 }, // upper bounds for Good and Moderate tiers
+          },
+          tvoc: {
+            name: 'Total VOCs',       // full display name shown on the metric card
+            unit: 'ppb',              // unit of measurement displayed alongside the value
+            precision: 0,             // decimal places for display (whole number)
+            min: 0, max: 2000,        // absolute clamp bounds — values never leave this range
+            baseline: { min: 0, max: 150 }, // initial value is seeded uniformly within this range
+            delta: 30,                // max random change applied per tick (±delta random walk)
+            thresholds: { good: 220, moderate: 660 }, // upper bounds for Good and Moderate tiers
+          },
+        },
+      };
+
+      // ============================================================
+      // SIMULATOR
+      // Responsible for generating and periodically updating metric
+      // values. Exposes two pure(-ish) functions:
+      //   generateInitialValues() — seeds each metric within its
+      //     baseline range and returns the initial SimulatorState.
+      //   tick(currentState)      — advances every metric by one
+      //     random-walk step, clamps to [min, max], and returns a
+      //     new state object (currentState is never mutated).
+      // ============================================================
+
+      /**
+       * generateInitialValues()
+       *
+       * Seeds every metric with a random starting value drawn uniformly
+       * from its baseline range [baseline.min, baseline.max].
+       *
+       * The baseline range represents "normal indoor conditions" — values
+       * that a real sensor would typically read in a healthy environment.
+       * Starting within this range avoids alarming the user with an
+       * immediately unhealthy reading before the simulation has had a
+       * chance to evolve naturally.
+       *
+       * @returns {SimulatorState} Initial application state with placeholder
+       *   tier/label/color strings (classification is applied by the caller
+       *   via classify() before the first render).
+       */
+      function generateInitialValues() {
+        const metrics = {};
+
+        // Iterate over every metric key defined in CONFIG
+        Object.keys(CONFIG.metrics).forEach(function (key) {
+          const baseline = CONFIG.metrics[key].baseline;
+
+          // Uniform random value within [baseline.min, baseline.max]:
+          //   Math.random() produces a value in [0, 1)
+          //   Multiplying by the range width scales it to [0, range)
+          //   Adding baseline.min shifts it to [baseline.min, baseline.max)
+          const value = baseline.min + Math.random() * (baseline.max - baseline.min);
+
+          metrics[key] = {
+            value: value,
+            tier: '',    // placeholder — caller must run classify() before rendering
+            label: '',   // placeholder — caller must run classify() before rendering
+            color: '',   // placeholder — caller must run classify() before rendering
+          };
+        });
+
+        return {
+          metrics: metrics,
+          lastUpdated: new Date(), // timestamp of state creation
+          running: false,          // simulation loop not yet started
+        };
+      }
+
+      /**
+       * tick(currentState)
+       *
+       * Advances every metric by one step of a symmetric random walk,
+       * then clamps the result to the metric's absolute [min, max] bounds.
+       * Returns a brand-new SimulatorState — currentState is never mutated.
+       *
+       * Random-walk formula:
+       *   (Math.random() * 2 - 1) produces a value in (-1, 1), giving a
+       *   direction that is equally likely to be positive or negative.
+       *   Multiplying by delta scales the step to the range (-delta, +delta),
+       *   so each tick nudges the value by at most ±delta units.
+       *
+       * Clamping:
+       *   Math.min(metric.max, newValue) caps the value at the ceiling.
+       *   Math.max(metric.min, ...) then raises it to the floor if needed.
+       *   Together they guarantee the value always stays within [min, max].
+       *
+       * @param {SimulatorState} currentState — the state to advance (not mutated)
+       * @returns {SimulatorState} A new state with updated metric values and a
+       *   fresh lastUpdated timestamp. The running flag and existing
+       *   tier/label/color fields are preserved; the caller is responsible for
+       *   re-classifying after each tick.
+       */
+      function tick(currentState) {
+        const newMetrics = {};
+
+        // Process every metric key independently
+        Object.keys(CONFIG.metrics).forEach(function (key) {
+          const metric = CONFIG.metrics[key];
+          const currentValue = currentState.metrics[key].value;
+
+          // Random-walk step: scale a uniform (-1, 1) random value by delta
+          // to get a step in the range (-delta, +delta)
+          const step = (Math.random() * 2 - 1) * metric.delta;
+          let newValue = currentValue + step;
+
+          // Clamp to [metric.min, metric.max] so values never escape the
+          // defined bounds regardless of how large the random step is
+          newValue = Math.max(metric.min, Math.min(metric.max, newValue));
+
+          // Copy the existing metric state and overwrite only the value;
+          // tier, label, and color are preserved here — the caller will
+          // re-classify after tick() returns
+          newMetrics[key] = {
+            value: newValue,
+            tier: currentState.metrics[key].tier,
+            label: currentState.metrics[key].label,
+            color: currentState.metrics[key].color,
+          };
+        });
+
+        // Return a new state object — currentState is never modified
+        return {
+          metrics: newMetrics,
+          lastUpdated: new Date(), // fresh timestamp for this tick
+          running: currentState.running, // preserve the running flag from the caller
+        };
+      }
+
+      // ============================================================
+      // THRESHOLD ENGINE
+      // A pure function that maps a metric key + numeric value to a
+      // classification object { tier, label, color }.
+      //   classify(metricKey, value)
+      // Uses the thresholds defined in CONFIG to assign exactly one
+      // of three tiers: good, moderate, or unhealthy — each with its
+      // corresponding status label and hex color.
+      // ============================================================
+
+      /**
+       * classify(metricKey, value)
+       *
+       * Maps a numeric sensor reading to one of three health tiers by
+       * comparing it against the thresholds defined in CONFIG.metrics.
+       *
+       * Tier boundaries (inclusive upper bounds):
+       *   value <= thresholds.good     → Good      (#22c55e)
+       *   value <= thresholds.moderate → Moderate  (#f59e0b)
+       *   value >  thresholds.moderate → Unhealthy (#f04848)
+       *
+       * @param {string} metricKey - Key into CONFIG.metrics (e.g. 'co2', 'pm25')
+       * @param {number} value     - Current sensor reading for the metric
+       * @returns {{ tier: string, label: string, color: string }}
+       */
+      function classify(metricKey, value) {
+        // Guard: unknown metric key — warn and return a safe default so the
+        // render loop never crashes due to a missing or misspelled key
+        if (!CONFIG.metrics[metricKey]) {
+          console.warn('classify: unknown metric key:', metricKey);
+          return { tier: 'good', label: 'Good', color: '#22c55e' };
+        }
+
+        const thresholds = CONFIG.metrics[metricKey].thresholds;
+
+        // Boundary 1: value at or below the Good upper bound → Good tier
+        if (value <= thresholds.good) {
+          return { tier: 'good', label: 'Good', color: '#22c55e' };
+        }
+
+        // Boundary 2: value at or below the Moderate upper bound → Moderate tier
+        if (value <= thresholds.moderate) {
+          return { tier: 'moderate', label: 'Moderate', color: '#f59e0b' };
+        }
+
+        // Boundary 3: value exceeds both thresholds → Unhealthy tier
+        return { tier: 'unhealthy', label: 'Unhealthy', color: '#f04848' };
+      }
+
+      // ============================================================
+      // RENDERER
+      // Handles all DOM mutations. Reads from state; never writes
+      // back to state. Exposes:
+      //   formatValue(metricKey, value)  — numeric string at correct
+      //     decimal precision for the metric.
+      //   formatTimestamp(date)          — "Last updated: HH:MM:SS"
+      //   renderCard(metricKey, state)   — updates a single card's
+      //     value, status label, and color indicator; triggers the
+      //     card--pulse animation for 600 ms.
+      //   renderAll(state)               — calls renderCard for all
+      //     six metrics and updates the timestamp element.
+      // ============================================================
+
+      /**
+       * formatValue(metricKey, value)
+       *
+       * Formats a numeric sensor reading to the correct number of decimal
+       * places for the given metric, as defined by `CONFIG.metrics[metricKey].precision`.
+       *
+       * Precision per metric:
+       *   co2, co, tvoc → 0 decimal places (whole number)
+       *   pm25, pm10    → 1 decimal place
+       *   hcho          → 2 decimal places
+       *
+       * @param {string} metricKey - Key into CONFIG.metrics (e.g. 'co2', 'pm25')
+       * @param {number} value     - Numeric sensor reading to format
+       * @returns {string} The formatted value string, or '0' if metricKey is unknown
+       */
+      function formatValue(metricKey, value) {
+        // Guard: unknown metric key — warn and return a safe default so the
+        // render loop never crashes due to a missing or misspelled key
+        if (!CONFIG.metrics[metricKey]) {
+          console.warn('formatValue: unknown metric key:', metricKey);
+          return '0';
+        }
+
+        // Format to the precision specified for this metric in CONFIG
+        return value.toFixed(CONFIG.metrics[metricKey].precision);
+      }
+
+      /**
+       * formatTimestamp(date)
+       *
+       * Formats a Date object as a human-readable "Last updated: HH:MM:SS" string.
+       * Each time component is zero-padded to exactly two digits so the output
+       * width is always constant — e.g., midnight reads "Last updated: 00:00:00"
+       * rather than "Last updated: 0:0:0".
+       *
+       * @param {Date} date - The Date object to format
+       * @returns {string} A string of the form "Last updated: HH:MM:SS"
+       */
+      function formatTimestamp(date) {
+        // Extract each time component and convert to string before padding;
+        // String() is used explicitly so padStart() has a string to operate on.
+        // padStart(2, '0') ensures single-digit values (e.g., 9) become "09".
+        const hh = String(date.getHours()).padStart(2, '0');   // 0–23 → "00"–"23"
+        const mm = String(date.getMinutes()).padStart(2, '0'); // 0–59 → "00"–"59"
+        const ss = String(date.getSeconds()).padStart(2, '0'); // 0–59 → "00"–"59"
+        return `Last updated: ${hh}:${mm}:${ss}`;
+      }
+
+      /**
+       * renderCard(metricKey, metricState)
+       *
+       * Updates a single metric card in the DOM to reflect the current state
+       * of the given metric. Selects the card by its `data-metric` attribute,
+       * then updates the value, status label, and color indicator elements.
+       * Finally, triggers the `card--pulse` CSS animation for 600 ms to
+       * provide a visual cue that the card has been refreshed.
+       *
+       * DOM structure expected inside the card:
+       *   .card-value     — displays the formatted numeric reading
+       *   .card-status    — displays the human-readable status label
+       *   .card-indicator — colored badge/dot; receives inline background-color
+       *
+       * @param {string} metricKey   - Key into CONFIG.metrics (e.g. 'co2', 'pm25')
+       * @param {MetricState} metricState - Current state for the metric:
+       *   { value: number, tier: string, label: string, color: string }
+       */
+      function renderCard(metricKey, metricState) {
+        // Select the card element by its data-metric attribute.
+        // If the card is not found (e.g., HTML not yet built or wrong key),
+        // log a warning and bail out early to avoid null-reference errors.
+        const card = document.querySelector('[data-metric="' + metricKey + '"]');
+        if (!card) {
+          console.warn('renderCard: no card element found for metric key:', metricKey);
+          return;
+        }
+
+        // Update the numeric value display, formatted to the correct decimal
+        // precision for this metric (e.g., 0 dp for CO2, 2 dp for HCHO).
+        const valueEl = card.querySelector('.card-value');
+        if (valueEl) {
+          valueEl.textContent = formatValue(metricKey, metricState.value);
+        }
+
+        // Update the status label (e.g., "Good", "Moderate", "Unhealthy").
+        const statusEl = card.querySelector('.card-status');
+        if (statusEl) {
+          statusEl.textContent = metricState.label;
+        }
+
+        // Update the color indicator's background color to the hex color
+        // corresponding to the current tier (#22c55e / #f59e0b / #f04848).
+        const indicatorEl = card.querySelector('.card-indicator');
+        if (indicatorEl) {
+          indicatorEl.style.backgroundColor = metricState.color;
+        }
+
+        // Trigger the pulse animation by adding the card--pulse class.
+        // The class is removed after 600 ms (matching the animation duration)
+        // so the animation can fire again on the next tick.
+        card.classList.add('card--pulse');
+        setTimeout(function () {
+          card.classList.remove('card--pulse');
+        }, 600);
+      }
+
+      /**
+       * renderAll(state)
+       *
+       * Updates every metric card and the timestamp element in a single pass.
+       * Called after each simulator tick (and once before the landing-to-dashboard
+       * transition) to keep the entire monitoring view in sync with the current
+       * application state.
+       *
+       * @param {SimulatorState} state - The current application state containing
+       *   a `metrics` record (one entry per metric key) and a `lastUpdated` Date.
+       */
+      function renderAll(state) {
+        // Iterate over all six metric keys defined in CONFIG and update each
+        // card individually. Using Object.keys(CONFIG.metrics) ensures this
+        // function stays in sync with the config — adding or removing a metric
+        // from CONFIG automatically includes or excludes it here.
+        Object.keys(CONFIG.metrics).forEach(function (key) {
+          renderCard(key, state.metrics[key]);
+        });
+
+        // Update the timestamp element with the formatted time of the most
+        // recent tick so the user can see exactly when the data was last refreshed.
+        const timestampEl = document.getElementById('timestamp');
+        if (timestampEl) {
+          timestampEl.textContent = formatTimestamp(state.lastUpdated);
+        }
+      }
+
+      // ============================================================
+      // CONTROLLER
+      // Wires the UI together. Contains:
+      //   startDashboard() — called once on START click; seeds
+      //     initial state, renders all cards, triggers the landing →
+      //     dashboard transition, then starts the setInterval loop.
+      // Event listener for #start-btn is attached at the bottom of
+      // this section after the DOM is ready.
+      // ============================================================
+
+      // Application state — mutable, holds the current readings for all 6 metrics
+      let state = null;
+
+      /**
+       * startDashboard()
+       *
+       * Called once when the user clicks START. Seeds the initial state,
+       * classifies every metric, renders all six cards, triggers the
+       * landing → dashboard transition, then starts the simulation loop.
+       *
+       * Steps:
+       *   1. Generate initial values and classify each metric so cards
+       *      are fully populated (tier, label, color) before they appear.
+       *   2. Render all cards while the landing screen is still visible
+       *      so the dashboard is ready the moment it fades in.
+       *   3. Add the `is-transitioning` CSS class to #landing to trigger
+       *      the fade-out animation.
+       *   4. After 600 ms (matching the animation duration), hide #landing
+       *      and make #dashboard visible.
+       *   5. Start the setInterval simulation loop (if available) so cards
+       *      update every CONFIG.UPDATE_INTERVAL milliseconds.
+       *   6. Mark state.running = true to signal the loop is active.
+       */
+      function startDashboard() {
+        // 1. Generate initial values and classify each metric
+        state = generateInitialValues();
+        Object.keys(state.metrics).forEach(function (key) {
+          const classification = classify(key, state.metrics[key].value);
+          state.metrics[key] = { ...state.metrics[key], ...classification };
+        });
+
+        // 2. Render all cards before the transition so they're populated when visible
+        renderAll(state);
+
+        // 3. Trigger the fade-out animation on the landing screen
+        const landing = document.getElementById('landing');
+        landing.classList.add('is-transitioning');
+
+        // 4. After 600 ms (matching the animation duration), hide landing and show dashboard
+        setTimeout(function () {
+          landing.style.display = 'none';
+          document.getElementById('dashboard').style.display = 'block';
+        }, 600);
+
+        // 5. Start the simulation loop (guard: check setInterval is available,
+        //    e.g., it may be absent in some non-browser environments)
+        if (typeof setInterval === 'function') {
+          setInterval(function () {
+            state = tick(state);
+            Object.keys(state.metrics).forEach(function (k) {
+              state.metrics[k] = { ...state.metrics[k], ...classify(k, state.metrics[k].value) };
+            });
+            renderAll(state);
+          }, CONFIG.UPDATE_INTERVAL);
+        }
+
+        // 6. Mark simulation as running
+        state.running = true;
+      }
+
+      // Attach the click handler to the START button.
+      // #dashboard already has display:none via its inline style (set in HTML),
+      // and #landing is visible by default — no extra JS needed for initial state.
+      document.getElementById('start-btn').addEventListener('click', startDashboard);
+    </script>
+  </body>
+</html>
