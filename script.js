@@ -1,27 +1,20 @@
 /* =============================================
    LOGO INJECTION
    ============================================= */
-function injectLogo(containerId, bright = true) {
-  const tpl = document.getElementById(bright ? 'logo-tpl-bright' : 'logo-tpl');
-  const container = document.getElementById(containerId);
-  if (!container || !tpl) return;
-  const clone = tpl.content.cloneNode(true);
-  container.appendChild(clone);
+function injectLogo(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = `
+    <div class="corgein-logo">
+      <div class="wordmark"><span class="cor">COR</span><span class="gein">GEIN</span></div>
+      <div class="tagline"><span class="cor">COR</span>ONA DISCHAR<span class="gein">GE IN</span>CINERATOR</div>
+    </div>`;
 }
 
-injectLogo('launch-logo', true);
-injectLogo('boot-logo', true);
-injectLogo('shutdown-logo', true);
-
-// Navbar logo — smaller, use a compact inline version
-(function() {
-  const el = document.getElementById('nav-logo');
-  el.innerHTML = `
-    <svg viewBox="0 0 240 52" width="130" height="34" xmlns="http://www.w3.org/2000/svg">
-      <text x="2" y="42" font-family="Syne,sans-serif" font-weight="800" font-size="44" fill="#ffffff" letter-spacing="-1.5">COR</text>
-      <text x="114" y="42" font-family="Syne,sans-serif" font-weight="800" font-size="44" fill="#00c2a8" letter-spacing="-1.5">GEIN</text>
-    </svg>`;
-})();
+injectLogo('launch-logo');
+injectLogo('boot-logo');
+injectLogo('shutdown-logo');
+injectLogo('nav-logo');
 
 /* =============================================
    SCREEN MANAGEMENT
